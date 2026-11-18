@@ -32,7 +32,18 @@ jobs:
 
       - name: 今日已完成签到
         if: steps.cache-success.outputs.cache-hit == 'true'
-        run: echo "今日已全部签到成功，跳过重复执行。"
+        env:
+          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+        shell: bash
+        run: |
+          echo "今日已全部签到成功，跳过重复执行。"
+          if [ -n "$SERVERCHAN_SENDKEY" ]; then
+            curl -sS --max-time 15 -o /dev/null \
+              --data-urlencode "title=夸克签到 · 今日已完成" \
+              --data-urlencode "desp=今天已全部签到成功，跳过重复执行。（北京时间 $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M')）" \
+              "https://sctapi.ftqq.com/${SERVERCHAN_SENDKEY}.send" \
+              || echo "⚠️ Server酱 推送失败（不影响签到）"
+          fi
 
       - name: 检出代码
         if: steps.cache-success.outputs.cache-hit != 'true'
@@ -66,6 +77,7 @@ jobs:
         if: steps.cache-success.outputs.cache-hit != 'true'
         env:
           COOKIE_QUARK: ${{ secrets.COOKIE_QUARK }}
+          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
         run: python checkIn_Quark.py
 
       - name: 生成今日成功标记

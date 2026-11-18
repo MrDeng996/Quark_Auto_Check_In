@@ -13,7 +13,7 @@ import re
 import sys
 import time
 from typing import Callable
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 import requests
 
@@ -21,6 +21,7 @@ import requests
 INFO_URL = "https://drive-m.quark.cn/1/clouddrive/capacity/growth/info"
 SIGN_URL = "https://drive-m.quark.cn/1/clouddrive/capacity/growth/sign"
 REQUIRED_PARAMS = ("kps", "sign", "vcode")
+SERVERCHAN_SEND_URL = "https://sctapi.ftqq.com/{sendkey}.send"
 
 
 class ConfigError(ValueError):
@@ -32,9 +33,37 @@ class QuarkAPIError(RuntimeError):
 
 
 def send(title: str, message: str) -> None:
-    """Print a notification-compatible summary."""
+    """Print the summary and, when configured, push it via Server酱 (Turbo).
+
+    A push failure never changes the process exit code: sign-in success is
+    decided solely by the accounts loop in ``main``.
+    """
 
     print(f"{title}:\n{message}")
+
+    sendkey = os.getenv("SERVERCHAN_SENDKEY", "").strip()
+    if not sendkey:
+        return
+
+    try:
+        response = requests.post(
+            SERVERCHAN_SEND_URL.format(sendkey=quote(sendkey, safe="")),
+            data={
+                "title": title,
+                # Server酱 renders the desp as Markdown; two trailing spaces
+                # make a hard line break without extra paragraph spacing.
+                "desp": message.replace("\n", "  \n"),
+            },
+            timeout=15,
+        )
+        payload = response.json() if response.content else {}
+        code = payload.get("code")
+        if response.ok and code == 0:
+            print(f"✅ Server酱 推送成功（{len(message)} 字）")
+        else:
+            print(f"⚠️ Server酱 推送失败：HTTP {response.status_code}, code={code}, msg={payload.get('message')}")
+    except Exception as exc:  # Push must never break sign-in.
+        print(f"⚠️ Server酱 推送异常（不影响签到结果）：{type(exc).__name__}: {exc}")
 
 
 def split_account_entries(raw_value: str | None) -> list[str]:
@@ -270,10 +299,10 @@ def main(
             results.append(f"{heading}\n❌ 未知错误：{type(exc).__name__}")
 
     summary = "\n\n".join(results)
-    send("夸克自动签到", summary)
-    print(
-        f"\n----------执行完毕：成功 {len(entries) - failures}，失败 {failures}----------"
-    )
+    success_count = len(entries) - failures
+    title = f"夸克签到 · 成功 {success_count} · 失败 {failures}"
+    print(f"\n----------执行完毕：成功 {success_count}，失败 {failures}----------")
+    send(title, summary)
     return 1 if failures else 0
 
 

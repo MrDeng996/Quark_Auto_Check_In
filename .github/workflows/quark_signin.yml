@@ -23,6 +23,18 @@ jobs:
         shell: bash
         run: echo "today=$(TZ='Asia/Shanghai' date +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
 
+      - name: 判断运行轮次
+        id: round
+        shell: bash
+        run: |
+          if [ "${{ github.event.schedule }}" = "0 5 * * *" ]; then
+            echo "push_on_success=0" >> "$GITHUB_OUTPUT"
+            echo "13:00 校验轮：仅失败时推送"
+          else
+            echo "push_on_success=1" >> "$GITHUB_OUTPUT"
+            echo "09:00 首次轮：无论成败都推送"
+          fi
+
       - name: 恢复今日成功标记
         id: cache-success
         uses: actions/cache/restore@v6
@@ -32,18 +44,8 @@ jobs:
 
       - name: 今日已完成签到
         if: steps.cache-success.outputs.cache-hit == 'true'
-        env:
-          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
         shell: bash
-        run: |
-          echo "今日已全部签到成功，跳过重复执行。"
-          if [ -n "$SERVERCHAN_SENDKEY" ]; then
-            curl -sS --max-time 15 -o /dev/null \
-              --data-urlencode "title=夸克签到 · 今日已完成" \
-              --data-urlencode "desp=今天已全部签到成功，跳过重复执行。（北京时间 $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M')）" \
-              "https://sctapi.ftqq.com/${SERVERCHAN_SENDKEY}.send" \
-              || echo "⚠️ Server酱 推送失败（不影响签到）"
-          fi
+        run: echo "今日已全部签到成功，跳过重复执行（按配置不推送）。"
 
       - name: 检出代码
         if: steps.cache-success.outputs.cache-hit != 'true'
@@ -78,6 +80,7 @@ jobs:
         env:
           COOKIE_QUARK: ${{ secrets.COOKIE_QUARK }}
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+          PUSH_ON_SUCCESS: ${{ steps.round.outputs.push_on_success }}
         run: python checkIn_Quark.py
 
       - name: 生成今日成功标记

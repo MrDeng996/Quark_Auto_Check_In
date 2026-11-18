@@ -23,6 +23,9 @@ SIGN_URL = "https://drive-m.quark.cn/1/clouddrive/capacity/growth/sign"
 REQUIRED_PARAMS = ("kps", "sign", "vcode")
 SERVERCHAN_SEND_URL = "https://sctapi.ftqq.com/{sendkey}.send"
 
+# 09:00 首次轮无论成败都推送；13:00 校验轮只在失败时推送。
+PUSH_ON_SUCCESS = os.getenv("PUSH_ON_SUCCESS", "1").strip() != "0"
+
 
 class ConfigError(ValueError):
     """Raised when COOKIE_QUARK is missing or malformed."""
@@ -302,7 +305,11 @@ def main(
     success_count = len(entries) - failures
     title = f"夸克签到 · 成功 {success_count} · 失败 {failures}"
     print(f"\n----------执行完毕：成功 {success_count}，失败 {failures}----------")
-    send(title, summary)
+    if failures or PUSH_ON_SUCCESS:
+        send(title, summary)
+    else:
+        print(f"{title}:\n{summary}")
+        print("13:00 校验轮签到成功，按配置跳过推送。")
     return 1 if failures else 0
 
 
